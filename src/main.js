@@ -22,10 +22,9 @@ let currentPage = 1;
 let userKey = '41929636-e94244ac3daa63b74aaebcf18';
 let inputQuery = '';
 
-form.addEventListener('submit', onFormSubmit);
-loadMoreBtn.addEventListener('click', onLoadMore);
+let isLoading = false;
 
-function createGallery(hits) {
+function createGallery(hits, totalHits) {
     const markup = hits
         .map(
             ({
@@ -36,19 +35,34 @@ function createGallery(hits) {
                 views,
                 comments,
                 downloads,
-            }) => `
-                <li class="gallery-item">
-                    <a class="item-link" href="${largeImageURL}">
-                        <img
-                            src="${webformatURL}"
-                            alt="${tags}"
-                            width="360"
-                            height="200"
-                        />
-                    </a>
-                    <ul class="mini-list">
-                        <!-- (existing code for mini-list) -->
-                    </ul>
+            }) =>
+                `<li class="gallery-item">
+                <a class="item-link" href="${largeImageURL}">
+                    <img
+                        src="${webformatURL}"
+                        alt="${tags}"
+                        width="360"
+                        height="200"
+                    />
+                </a>
+                <ul class="mini-list">
+                    <li class="mini-header">
+                        <h3>Likes</h3>
+                        <p>${likes}</p>
+                    </li>
+                    <li class="mini-header">
+                        <h3>Views</h3>
+                        <p>${views}</p>
+                    </li>
+                    <li class="mini-header">
+                        <h3>Comments</h3>
+                        <p>${comments}</p>
+                    </li>
+                    <li class="mini-header">
+                        <h3>Downloads</h3>
+                        <p>${downloads}</p>
+                    </li>
+                </ul>
                 </li>`
         )
         .join('');
@@ -56,35 +70,26 @@ function createGallery(hits) {
     loaderAnimation.remove();
     gallery.insertAdjacentHTML('beforeend', markup);
 
-    if (hits.length < 30) {
+    if (currentPage * 40 >= totalHits) {
         loadMoreBtn.style.display = 'none';
-        if (currentPage === 1) {
-            iziToast.show({
-                message: 'Sorry, there are no images matching your search query. Please try again!',
-                position: 'topRight',
-                color: '#EF4040',
-                messageColor: '#FAFAFB',
-                iconUrl: bixOctagonSvg,
-            });
-        } else {
-            iziToast.show({
-                message: 'We are sorry, but you have reached the end of search results.',
-                position: 'topRight',
-                color: '#EF4040',
-                messageColor: '#FAFAFB',
-                iconUrl: bixOctagonSvg,
-            });
-        }
+        iziToast.show({
+            message: "We're sorry, but you've reached the end of search results.",
+            position: 'topRight',
+            color: '#808080',
+            messageColor: '#FAFAFB',
+        });
     } else {
         loadMoreBtn.style.display = 'block';
     }
 
     instanceOfLightbox.refresh();
+    isLoading = false;
 }
 
 async function onFormSubmit(e) {
     e.preventDefault();
     gallery.innerHTML = '';
+    loadMoreBtn.style.display = 'none';
     form.after(loaderAnimation);
 
     inputQuery = formInput.value;
@@ -98,30 +103,39 @@ async function onFormSubmit(e) {
                 image_type: 'photo',
                 orientation: 'horizontal',
                 safesearch: true,
-                per_page: 30,
+                per_page: 40,
             },
         });
 
-        const { hits } = response.data;
+        const { hits, totalHits } = response.data;
 
-        createGallery(hits);
+        createGallery(hits, totalHits);
     } catch (error) {
         loaderAnimation.remove();
+        console.error('Error during API request:', error.response);
         iziToast.show({
-            message: `${error}`,
+            message: 'Failed to fetch images. Please try again later.',
             position: 'topRight',
             color: '#EF4040',
             messageColor: '#FAFAFB',
-            iconUrl: '/img/bi_x-octagon.svg',
+            iconUrl: bixOctagonSvg,
         });
     }
 }
 
-async function onLoadMore() {
+async function onLoadMore(e) {
+    e.preventDefault();
+
+    if (isLoading) return;
+
     formInput.value = '';
     form.after(loaderAnimation);
 
     try {
+        isLoading = true;
+
+        const scrollPosition = window.scrollY || window.pageYOffset;
+
         currentPage++;
         const response = await axios.get('https://pixabay.com/api/', {
             params: {
@@ -130,21 +144,32 @@ async function onLoadMore() {
                 image_type: 'photo',
                 orientation: 'horizontal',
                 safesearch: true,
-                per_page: 30,
+                per_page: 40,
                 page: currentPage,
             },
         });
 
-        const { hits } = response.data;
-        createGallery(hits);
+        const { hits, totalHits } = response.data;
+        createGallery(hits, totalHits);
+
+        window.scrollTo({
+            top: scrollPosition,
+            behavior: 'smooth',
+        });
     } catch (error) {
         loaderAnimation.remove();
+        console.error('Error during API request:', error.response);
         iziToast.show({
             message: `${error}`,
             position: 'topRight',
             color: '#EF4040',
             messageColor: '#FAFAFB',
-            iconUrl: '/img/bi_x-octagon.svg',
+            iconUrl: bixOctagonSvg,
         });
+    } finally {
+        isLoading = false;
     }
 }
+
+form.addEventListener('submit', onFormSubmit);
+loadMoreBtn.addEventListener('click', onLoadMore);
